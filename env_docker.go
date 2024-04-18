@@ -44,6 +44,7 @@ type DockerEnvironment struct {
 
 	hostAddr      string
 	dockerVolumes []string
+	cpus          string
 
 	registered map[string]struct{}
 	listeners  []EnvironmentListener
@@ -113,6 +114,7 @@ func New(opts ...EnvironmentOption) (_ *DockerEnvironment, err error) {
 		verbose:       e.verbose,
 		registered:    map[string]struct{}{},
 		dockerVolumes: e.volumes,
+		cpus:          e.cpus,
 	}
 
 	// Force a shutdown in order to cleanup from a spurious situation in case
@@ -269,11 +271,27 @@ func (e *DockerEnvironment) SharedDir() string {
 	return e.dir
 }
 
+const dockerCPUEnvName = "E2E_DOCKER_CPUS"
+
 func (e *DockerEnvironment) buildDockerRunArgs(name string, ports map[string]int, opts StartOptions) []string {
 	args := []string{"--rm", "--net=" + e.networkName, "--name=" + dockerNetworkContainerHost(e.networkName, name), "--hostname=" + name}
 
 	// Mount the docker env working directory into the container. It's shared across all containers to allow easier scenarios.
 	args = append(args, "-v", fmt.Sprintf("%s:%s:z", e.dir, e.dir))
+
+	// Allow reducing available CPU Time via environment variables or
+	// environment parameters. The latter takes precedence.
+	dockerCPUsParam := ""
+	dockerCPUsEnv := os.Getenv(dockerCPUEnvName)
+	if dockerCPUsEnv != "" {
+		dockerCPUsParam = dockerCPUsEnv
+	}
+	if e.cpus != "" {
+		dockerCPUsParam = e.cpus
+	}
+	if dockerCPUsParam != "" {
+		args = append(args, "--cpus", dockerCPUsParam)
+	}
 
 	for _, v := range e.dockerVolumes {
 		args = append(args, "-v", v)
@@ -677,7 +695,13 @@ func (d *dockerRunnable) Exec(command Command, opts ...ExecOption) error {
 	args := []string{"exec", d.containerName()}
 	args = append(args, command.Cmd)
 	args = append(args, command.Args...)
+	if o.Stdin != nil {
+		args = append(args[:1], append([]string{"-i"}, args[1:]...)...)
+	}
 	cmd := d.env.exec("docker", args...)
+	if o.Stdin != nil {
+		cmd.Stdin = o.Stdin
+	}
 	cmd.Stdout = o.Stdout
 	cmd.Stderr = o.Stderr
 	return cmd.Run()
@@ -795,7 +819,8 @@ func (e *DockerEnvironment) close() {
 	}
 
 	if e.dir != "" {
-		if err := e.exec("chmod", "-R", "777", e.dir).Run(); err != nil {
+		if out, err := e.exec("chmod", "-R", "777", e.dir).CombinedOutput(); err != nil {
+			e.logger.Log(string(out))
 			e.logger.Log("Error while chmod sharedDir", e.dir, "err:", err)
 		}
 		if err := os.RemoveAll(e.dir); err != nil {
