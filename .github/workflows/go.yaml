@@ -20,7 +20,7 @@ jobs:
         with:
           go-version: 1.18.x
 
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -60,7 +60,7 @@ jobs:
           # Configure the Lima guest to forward packets from the col0 bridge to Docker containers.
           limactl shell colima -- sudo iptables -t filter -A FORWARD -s $IP/24 -d 172.0.0.0/8 -j ACCEPT
 
-      - uses: actions/cache@v1
+      - uses: actions/cache@v4
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
