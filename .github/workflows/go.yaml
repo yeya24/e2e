@@ -16,9 +16,9 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
-          go-version: 1.18.x
+          go-version: 1.25.x
 
       - uses: actions/cache@v4
         with:
@@ -34,8 +34,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        go: ["1.18.x", "1.19.x"]
-        platform: [ubuntu-latest, macos-latest]
+        go: ["1.24.x", "1.25.x"]
+        platform: [ubuntu-latest, macos-15-intel]
 
     name: Unit tests on Go ${{ matrix.go }} ${{ matrix.platform }}
     steps:
@@ -43,22 +43,13 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Install Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: ${{ matrix.go }}
 
-      - name: Install docker - MacOS
+      - name: Setup Docker on macOS
         if: runner.os == 'macOS'
-        run: |
-          brew install docker colima kind kubectl
-          # Ensure Lima guest is accessible from mac host.
-          colima start --network-address
-          # Find the IP address of the Lima guest.
-          IP=$(limactl shell colima -- ip a show dev col0 | head -n3 | tail -n1 | cut -d' ' -f6 | rev | cut -c4- | rev)
-          # Route packets destined for 172/8 through the Lima guest.
-          sudo route -nv add -net 172 $IP
-          # Configure the Lima guest to forward packets from the col0 bridge to Docker containers.
-          limactl shell colima -- sudo iptables -t filter -A FORWARD -s $IP/24 -d 172.0.0.0/8 -j ACCEPT
+        uses: douglascamata/setup-docker-macos-action@v1
 
       - uses: actions/cache@v4
         with:
